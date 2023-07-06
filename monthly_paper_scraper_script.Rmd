@@ -1,0 +1,93 @@
+---
+title: "monthly_paper_scraper"
+author: "Niall Garvey"
+date: "2022-11-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+#NB not all packages here were actually used in the script so will remove ones not used, just like to keep them here incase we need to use them going forward
+install.packages("data.table")
+install.packages("rentrez")
+install.packages("readr")
+install.packages("cronR")
+install.packages("tidyverse")
+install.packages("lubridate")
+```
+
+```{r}
+library(rentrez)
+library(cronR)
+library(lubridate)
+#today gives the current date and formats it correct for entrez_search.
+today = format(Sys.Date(), format = "%Y/%m")
+
+#z paste statement allows us to paste our variables into the quotation marks needed for the term parameter in entrez_search.
+z = paste(today,'[PDAT]', 'AND',"(National Virus Reference Laboratory [AFFL])")
+
+#This pulls the ids for all the papers matching our query, we'll use these ids further down to pull info for our database.
+res <- entrez_search(db = "pubmed", term = z, retmax = 9999, use_history = TRUE)
+res$count
+# This the is format for searching by authors which can be pasted in (Jeff Connell[ATTL] AND Jaythoon Hassan[ATTL])
+```
+
+```{r}
+#This uses those ids to fetch the XMLs of those papers
+recs <- entrez_fetch(db = "pubmed", id = res$ids, rettype = "xml", parsed = TRUE)
+
+library(XML)
+library(readr)
+#generates a summary of these xml fields from which we pull what we want 
+esums <- entrez_summary(db = "pubmed", id = res$ids, always_return_list = T)
+
+paper_ids = extract_from_esummary(esums, "uid")
+paper_dates = extract_from_esummary(esums, "pubdate")
+paper_titles = extract_from_esummary(esums, "title")
+paper_authors = extract_from_esummary(esums, "authors")
+paper_urls = extract_from_esummary(esums, "availablefromurl")
+paper_LID =  extract_from_esummary(esums, "LID")
+paper_full_authors = extract_from_esummary(esums, "FULL")
+paper_locations = extract_from_esummary(esums, "elocationid")
+#paper_journal = extract_from_esummary(esums, "JOURN") 
+#paper_first_reported = extract_from_esummary(esums, "CRDT")
+
+#makes a dataframe of the fields of interest 
+df <- data.frame(paper_dates, paper_titles, paper_locations)
+```
+
+```{r}
+#library(data.table)
+#author parameter outputs as a table so needs to be done separately and parsed back into the main output csv.
+authors_transposed = t(paper_authors)
+
+#converting the authors_transposed matrix to be a dataframe 
+author_names = as.data.frame(authors_transposed)
+print(author_names)
+
+#add author names column to output csv
+df$authors <- author_names$name
+print(df)
+
+#This deals with the authors column being a list 
+df$authors <- vapply(df$authors, paste, collapse = ", ", character(1L))
+print(df)
+#Save dataframe generated so it can be accessed by other scripts
+save(df,file="/home/niall/NVRL/paper_scraper/NVRL_papers_list.Rda")
+
+#saves file as an excel readable csv, so just change the outfile to wherever you want it to be
+write.csv2(df, file = "/home/niall/NVRL/paper_scraper/NVRL_papers_list.csv")
+```
+
+
+
+
+
+
+
+
+
