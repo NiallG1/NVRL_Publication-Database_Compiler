@@ -1,0 +1,64 @@
+---
+title: "Untitled"
+author: "Niall Garvey"
+date: "2023-01-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(RMariaDB)
+#establish connect to database
+con <- dbConnect(
+ drv = RMariaDB::MariaDB(), 
+  username = "admin",
+  password = "Genetics123", 
+  host = NULL, 
+ dbname = "Test_database"
+   
+)
+dbListTables(con)
+dbListFields(con, "Articles")
+dbReadTable(con, "Articles")
+#this is currently set to check for papers on 2023-01-24 as that was the inital reported date, change this to be sys.date when running both scripts again, will change in future to use a 7 day interval
+res <- dbSendQuery(con, "SELECT * FROM Articles WHERE reported_date = '2023-01-24'")
+yurt = dbFetch(res)
+dbClearResult(res)
+dbDisconnect(con)
+```
+
+```{r}
+#This removes the id (number) column from our data and amends the column names to be more readable
+yurt2 <- yurt[,-1]
+colnames(yurt2)[1]  <- "Publication date"
+colnames(yurt2)[2]  <- "Date paper first reported"  
+colnames(yurt2)[3]  <- "Title"
+colnames(yurt2)[4]  <- "Paper Location"
+colnames(yurt2)[5]  <- "Authors"  
+```
+
+
+```{r}
+#install.packages("gmailr")
+#install.packages("tableHTML")
+library(gmailr)
+library(tableHTML)
+#gives location of which credentials file to use
+use_secret_file("/home/niall/NVRL/paper_scraper/NVRL_paper_scraper.json")
+gm_auth_configure(path ="/home/niall/NVRL/paper_scraper/NVRL_paper_scraper.json")
+#makes our table a html table
+html_yurt = tableHTML(yurt2)
+#gives text and table for our email
+html_bod <- paste0("<p> Hello everyone, here is the list of NVRL publications for this month. </p>", html_yurt, "<p> If anyone has any queries or corrections please contact niall.garvey@ucd.ie. </p>" )
+#gives the email sender, recipient, email body and subject
+html_msg <- gm_mime() %>%
+  gm_to("gabo.gonzalez@ucd.ie") %>%
+  gm_from("niall.garvey@ucd.ie") %>%
+  gm_subject("NVRL Monthly Publications") %>%
+  gm_html_body(html_bod)
+#sends our message
+gm_send_message(html_msg)
+```
